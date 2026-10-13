@@ -6,10 +6,11 @@ import { SolicitudEntity } from './entities/solicitud.entity.js';
 import { SolicitudesController } from './solicitudes.controller.js';
 import { SolicitudesService } from './solicitudes.service.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { SolicitudHistorial } from './entities/solicitud-historial.entity.js';
 
 // Módulo que agrupa los componentes del dominio de solicitudes (entidad, controlador y servicio)
 @Module({
-  imports: [TypeOrmModule.forFeature([SolicitudEntity]), AuthModule],
+  imports: [TypeOrmModule.forFeature([SolicitudEntity, SolicitudHistorial]), AuthModule],
   controllers: [SolicitudesController],
   providers: [SolicitudesService],
 })

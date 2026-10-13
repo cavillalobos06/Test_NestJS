@@ -1,6 +1,7 @@
 // Ruta: src/solicitudes/dto/create-solicitud.dto.ts
 
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 // DTO que valida los datos requeridos para registrar una nueva solicitud comercial
@@ -17,14 +18,6 @@ export class CreateSolicitudDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(200)
   descripcion: string;
-
-  @ApiProperty({
-    example: 'asesor01',
-    description: 'Identificador del asesor responsable',
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  asesor: string;
 }

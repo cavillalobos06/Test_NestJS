@@ -34,9 +34,7 @@ async function bootstrap() {
   // Configuración y generación de la documentación interactiva con Swagger/OpenAPI
   const swaggerConfig = new DocumentBuilder()
     .setTitle('API Gestor Solicitudes Con NestJS')
-    .setDescription(
-      'API para registrar, consultar y gestionar solicitudes',
-    )
+    .setDescription('API para registrar, consultar y gestionar solicitudes')
     .setVersion('1.0.0')
     .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
     .addApiKey({ type: 'apiKey', name: 'x-user', in: 'header' }, 'x-user')

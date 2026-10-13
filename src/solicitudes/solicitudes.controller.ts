@@ -1,5 +1,3 @@
-// Ruta: src/solicitudes/solicitudes.controller.ts
-
 import {
   Body,
   Controller,
@@ -8,67 +6,117 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+
+import {
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiForbiddenResponse,
+  ApiHeader,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+
 import { AppUser } from '../auth/auth.service.js';
+
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
+
 import { ApiKeyGuard } from '../common/guards/api-key/api-key.guard.js';
 import { RolesGuard } from '../common/guards/roles/roles.guard.js';
 import { UserGuard } from '../common/guards/user/user.guard.js';
+
 import { CreateSolicitudDto } from './dto/create-solicitud.dto.js';
 import { UpdateEstadoDto } from './dto/update-estado.dto.js';
+import { AssingSolicitudDto } from './dto/asignacion-solicitud.dto.js';
+import { QuerySolicitudesDto } from './dto/query-solicitudes.dto.js';
+
 import { SolicitudesService } from './solicitudes.service.js';
 
-// Controlador HTTP que expone y gestiona las rutas del módulo de solicitudes
 @ApiTags('Solicitudes')
 @ApiHeader({
   name: 'x-api-key',
   required: true,
-  description: 'Una de las claves configuradas en API_KEYS',
+  description: 'Clave configurada en API_KEYS',
 })
 @ApiHeader({
   name: 'x-user',
   required: true,
   description: 'admin01, supervisor01, asesor01 o asesor02',
 })
+@ApiUnauthorizedResponse({ description: 'Falta una clave o identidad válida' })
+@ApiBadRequestResponse({ description: 'Datos de entrada inválidos' })
+@ApiForbiddenResponse({ description: 'Permisos insuficientes' })
+@ApiNotFoundResponse({ description: 'Solicitud inexistente o inaccesible' })
 @Controller('solicitudes')
 @UseGuards(ApiKeyGuard, UserGuard, RolesGuard)
 export class SolicitudesController {
   constructor(private readonly solicitudesService: SolicitudesService) {}
 
-  // Endpoint POST /solicitudes: crea una nueva solicitud comercial
   @Post()
   @ApiOperation({ summary: 'Crear una solicitud comercial' })
   create(@Body() dto: CreateSolicitudDto, @CurrentUser() user: AppUser) {
     return this.solicitudesService.create(dto, user);
   }
 
-  // Endpoint GET /solicitudes: lista todas las solicitudes visibles según el rol del usuario
   @Get()
   @ApiOperation({
-    summary: 'Listar solicitudes visibles para el usuario actual',
+    summary: 'Consultar solicitudes con filtros y paginación',
   })
-  findAll(@CurrentUser() user: AppUser) {
-    return this.solicitudesService.findAll(user);
+  findAll(@Query() filtros: QuerySolicitudesDto, @CurrentUser() user: AppUser) {
+    return this.solicitudesService.findAll(user, filtros);
   }
 
-  // Endpoint GET /solicitudes/:id: consulta una solicitud por su ID validando permisos
+  @Get(':id/historial')
+  @ApiOperation({
+    summary: 'Consultar el historial de auditoría de una solicitud',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  findHistorial(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AppUser,
+  ) {
+    return this.solicitudesService.findHistorial(id, user);
+  }
+
+  @Patch(':id/asignacion')
+  @Roles('admin', 'supervisor')
+  @ApiOperation({
+    summary: 'Asignar o reasignar una solicitud a un asesor',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiConflictResponse({
+    description: 'No se puede reasignar una solicitud resuelta',
+  })
+  asignar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssingSolicitudDto,
+    @CurrentUser() user: AppUser,
+  ) {
+    return this.solicitudesService.asignar(id, dto, user);
+  }
+
   @Get(':id')
-  @ApiOperation({ summary: 'Consultar una solicitud por id' })
+  @ApiOperation({ summary: 'Consultar el detalle de una solicitud' })
   @ApiParam({ name: 'id', type: Number })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AppUser) {
     return this.solicitudesService.findOne(id, user);
   }
 
-  // Endpoint PATCH /solicitudes/:id/estado: cambia el estado de la solicitud (solo admin y supervisor)
   @Patch(':id/estado')
   @Roles('admin', 'supervisor')
   @ApiOperation({
-    summary: 'Cambiar el estado siguiendo las transiciones permitidas',
+    summary: 'Cambiar el estado con control de versión',
   })
   @ApiParam({ name: 'id', type: Number })
+  @ApiConflictResponse({
+    description: 'Conflicto de versión o de negocio',
+  })
   updateEstado(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateEstadoDto,

@@ -1,0 +1,10 @@
+import { ApiProperty } from "@nestjs/swagger";
+import { IsNotEmpty, IsString, MaxLength } from "class-validator";
+
+export class AssingSolicitudDto {
+    @ApiProperty({example: 'asesor02', description: 'Identificador del asesor que recibirá la solicitud'})
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(80)
+    asesorId: string;
+}
