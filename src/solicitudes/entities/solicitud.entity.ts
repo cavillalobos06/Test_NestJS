@@ -1,28 +1,47 @@
-// Ruta: src/solicitudes/entities/solicitud.entity.ts
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+  Relation,
+} from 'typeorm';
 
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm'
+import { SolicitudHistorial } from './solicitud-historial.entity.js';
 
-// Enumeración que define el ciclo de vida y los estados de una solicitud comercial
 export enum EstadoSolicitud {
-    PENDIENTE = "PENDIENTE",
-    EN_GESTION = "EN_GESTION",
-    RESUELTA = "RESUELTA"
+  PENDIENTE = 'PENDIENTE',
+  EN_GESTION = 'EN_GESTION',
+  RESUELTA = 'RESUELTA',
 }
 
-// Entidad TypeORM que representa la tabla 'solicitudes' en la base de datos
-@Entity('solicitudes')
-export class SolicitudEntity {
+@Entity({ name: 'solicitudes' })
+@Index('idx_solicitudes_estado', ['estado'])
+@Index('idx_solicitudes_asesor', ['asesor'])
+@Index('idx_solicitudes_creada_en', ['creadaEn'])
+export class Solicitud {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 150 })
+  @Column({
+    type: 'varchar',
+    length: 150,
+  })
   cliente: string;
 
-  @Column({ type: 'text' })
+  @Column({
+    type: 'text',
+  })
   descripcion: string;
 
-  @Column({ type: 'varchar', length: 100 })
-  asesor: string;
+  @Column({
+    type: 'varchar',
+    length: 80,
+    nullable: true,
+  })
+  asesor: string | null;
 
   @Column({
     type: 'enum',
@@ -31,9 +50,18 @@ export class SolicitudEntity {
   })
   estado: EstadoSolicitud;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({
+    name: 'creada_en',
+    type: 'timestamptz',
+  })
   creadaEn: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({
+    name: 'actualizada_en',
+    type: 'timestamptz',
+  })
   actualizadaEn: Date;
+
+  @OneToMany(() => SolicitudHistorial, (historial) => historial.solicitud)
+  historial: Relation<SolicitudHistorial[]>;
 }

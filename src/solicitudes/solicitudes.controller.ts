@@ -1,27 +1,40 @@
-// Ruta: src/solicitudes/solicitudes.controller.ts
-
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
   Patch,
   Post,
-  UseGuards,
+  Query,
+  Req,
 } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+
+import {
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiHeader,
+} from '@nestjs/swagger';
+
+import { Request } from 'express';
+
 import { AppUser } from '../auth/auth.service.js';
-import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
-import { ApiKeyGuard } from '../common/guards/api-key/api-key.guard.js';
-import { RolesGuard } from '../common/guards/roles/roles.guard.js';
-import { UserGuard } from '../common/guards/user/user.guard.js';
+import { UseGuards } from '@nestjs/common';
+import { AuthGuard } from '../auth/guard/auth.guard.js';
+
+import { SolicitudesService } from './solicitudes.service.js';
 import { CreateSolicitudDto } from './dto/create-solicitud.dto.js';
 import { UpdateEstadoDto } from './dto/update-estado.dto.js';
-import { SolicitudesService } from './solicitudes.service.js';
+import { AssignSolicitudDto } from './dto/assign-solicitud.dto.js';
+import { QuerySolicitudesDto } from './dto/query-solicitudes.dto.js';
 
-// Controlador HTTP que expone y gestiona las rutas del módulo de solicitudes
+interface AuthenticatedRequest extends Request {
+  user: AppUser;
+}
+
 @ApiTags('Solicitudes')
 @ApiHeader({
   name: 'x-api-key',
@@ -33,47 +46,117 @@ import { SolicitudesService } from './solicitudes.service.js';
   required: true,
   description: 'admin01, supervisor01, asesor01 o asesor02',
 })
+@UseGuards(AuthGuard)
 @Controller('solicitudes')
-@UseGuards(ApiKeyGuard, UserGuard, RolesGuard)
 export class SolicitudesController {
   constructor(private readonly solicitudesService: SolicitudesService) {}
 
-  // Endpoint POST /solicitudes: crea una nueva solicitud comercial
+  // POST /solicitudes
   @Post()
-  @ApiOperation({ summary: 'Crear una solicitud comercial' })
-  create(@Body() dto: CreateSolicitudDto, @CurrentUser() user: AppUser) {
-    return this.solicitudesService.create(dto, user);
+  @ApiOperation({ summary: 'Crear una solicitud' })
+  @ApiBody({ type: CreateSolicitudDto })
+  async create(
+    @Body() dto: CreateSolicitudDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const usuario = this.getUsuario(request);
+    return this.solicitudesService.create(dto, usuario);
   }
 
-  // Endpoint GET /solicitudes: lista todas las solicitudes visibles según el rol del usuario
+  // GET /solicitudes
   @Get()
   @ApiOperation({
-    summary: 'Listar solicitudes visibles para el usuario actual',
+    summary: 'Listar solicitudes con filtros y paginación',
   })
-  findAll(@CurrentUser() user: AppUser) {
-    return this.solicitudesService.findAll(user);
+  async findAll(
+    @Query() filtros: QuerySolicitudesDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const usuario = this.getUsuario(request);
+    return this.solicitudesService.findAll(usuario, filtros);
   }
 
-  // Endpoint GET /solicitudes/:id: consulta una solicitud por su ID validando permisos
-  @Get(':id')
-  @ApiOperation({ summary: 'Consultar una solicitud por id' })
-  @ApiParam({ name: 'id', type: Number })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AppUser) {
-    return this.solicitudesService.findOne(id, user);
-  }
-
-  // Endpoint PATCH /solicitudes/:id/estado: cambia el estado de la solicitud (solo admin y supervisor)
-  @Patch(':id/estado')
-  @Roles('admin', 'supervisor')
+  // GET /solicitudes/:id/historial
+  // Debe declararse antes de GET /:id para mayor claridad.
+  @Get(':id/historial')
   @ApiOperation({
-    summary: 'Cambiar el estado siguiendo las transiciones permitidas',
+    summary: 'Consultar el historial de una solicitud',
   })
   @ApiParam({ name: 'id', type: Number })
-  updateEstado(
+  async findHistory(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const usuario = this.getUsuario(request);
+
+    if (!['admin', 'supervisor', 'asesor'].includes(usuario.rol)) {
+      throw new ForbiddenException(
+        'No tienes permiso para consultar el historial',
+      );
+    }
+
+    return this.solicitudesService.findHistory(id, usuario);
+  }
+
+  // PATCH /solicitudes/:id/asignacion
+  @Patch(':id/asignacion')
+  @ApiOperation({
+    summary: 'Asignar o reasignar un asesor',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: AssignSolicitudDto })
+  async assign(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignSolicitudDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const usuario = this.getUsuario(request);
+
+    if (!['admin', 'supervisor'].includes(usuario.rol)) {
+      throw new ForbiddenException(
+        'Solo admin y supervisor pueden asignar asesores',
+      );
+    }
+
+    return this.solicitudesService.assign(id, dto, usuario);
+  }
+
+  // PATCH /solicitudes/:id/estado
+  @Patch(':id/estado')
+  @ApiOperation({
+    summary: 'Actualizar el estado de una solicitud',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateEstadoDto })
+  async updateEstado(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateEstadoDto,
-    @CurrentUser() user: AppUser,
+    @Req() request: AuthenticatedRequest,
   ) {
-    return this.solicitudesService.updateEstado(id, dto, user);
+    const usuario = this.getUsuario(request);
+    return this.solicitudesService.updateEstado(id, dto, usuario);
+  }
+
+  // GET /solicitudes/:id
+  @Get(':id')
+  @ApiOperation({ summary: 'Consultar una solicitud por ID' })
+  @ApiParam({ name: 'id', type: Number })
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const usuario = this.getUsuario(request);
+    return this.solicitudesService.findOne(id, usuario);
+  }
+
+  // Recupera el usuario que la autenticación añadió a la petición.
+  private getUsuario(request: AuthenticatedRequest): AppUser {
+    if (!request.user) {
+      throw new ForbiddenException(
+        'No se encontró el usuario autenticado en la petición',
+      );
+    }
+
+    return request.user;
   }
 }
